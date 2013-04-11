@@ -15,7 +15,7 @@ INCLUDEPATH=\
     -Iinclude\
     -I/usr/local/include\
 
-CFLAGS+=  -D_POSIX_C_SOURCE -std=c99 ${INCLUDEPATH}
+CFLAGS+=  -g -D_POSIX_C_SOURCE -std=c99 ${INCLUDEPATH}
 LDFLAGS+= -L/usr/local/lib -Llib
 LDLIBS+=  -lghthash
 YFLAGS+=  --defines=work/parser.h -o y.tab.c
@@ -26,6 +26,8 @@ YFLAGS+=  --defines=work/parser.h -o y.tab.c
 all: bin/vslc
 test: all
 	./test_runner.sh
+debug: all
+	gdb -tui bin/vslc
 
 #
 # The binary is built in 'obj' when all the object code is ready.
