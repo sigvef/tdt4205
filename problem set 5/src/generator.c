@@ -103,6 +103,8 @@ void generate ( FILE *stream, node_t *root )
             TEXT_HEAD();
 
             /* TODO: Insert a call to the first defined function here */
+            node_t* function = root->children[0]->children[0];
+            instruction_add ( CALL, function->children[0]->data, NULL, 0, 0 );          \
 
             TEXT_TAIL();
 
@@ -116,6 +118,13 @@ void generate ( FILE *stream, node_t *root )
              * Set up/take down activation record for the function, return value
              */
 
+            instruction_add ( LABEL, root->children[0]->data, NULL, 0, 0 );          \
+            instruction_add ( PUSH, STRDUP(ebp), NULL, 0, 0);
+            RECUR();
+            instruction_add ( LEAVE, NULL, NULL, 0, 0 );          \
+            instruction_add ( MOVE, STRDUP(esp), STRDUP(ebp), 0, 0);
+            instruction_add ( RET, NULL, NULL, 0, 0);
+
             break;
 
         case BLOCK:
@@ -123,6 +132,12 @@ void generate ( FILE *stream, node_t *root )
              * Blocks:
              * Set up/take down activation record, no return value
              */
+
+            instruction_add ( PUSH, STRDUP(ebp), NULL, 0, 0);
+            instruction_add ( MOVE, STRDUP(esp), STRDUP(ebp), 0, 0);
+            instruction_add ( LEAVE, NULL, NULL, 0, 0);
+            RECUR();
+
 
             break;
 
