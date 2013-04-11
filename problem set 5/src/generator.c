@@ -146,6 +146,7 @@ void generate ( FILE *stream, node_t *root )
              * Add space on local stack
              */
 
+
             for(int i=0;i<root->children[0]->n_children;i++){
                 instruction_add ( PUSH, 0, NULL, 0, 0);
 
@@ -163,6 +164,9 @@ void generate ( FILE *stream, node_t *root )
              * Emit the list of print items, followed by newline (0x0A)
              */
 
+            RECUR();
+
+
             break;
 
         case PRINT_ITEM:
@@ -171,6 +175,26 @@ void generate ( FILE *stream, node_t *root )
              * Determine what kind of value (string literal or expression)
              * and set up a suitable call to printf
              */
+
+                ;node_t *item = root->children[0];
+                printf("want to print! %s :: %i\n", item->type.text, *(int*) item->data);
+                if(item->type.index == TEXT){
+                    
+                    /* 20 chosen at random, TODO: choose better number */
+                    char literal[20];
+                    sprintf(literal, "$.STRING%i", *(int*) item->data);
+
+                    instruction_add ( PUSH, STRDUP(literal), NULL, 0, 0);
+                    instruction_add ( SYSCALL, "printf", NULL, 0, 0);
+                }else{
+                    generate(stream, item);
+                    instruction_add ( PUSH, "$"#.INTEGER, NULL, 0, 0);
+                    instruction_add ( SYSCALL, "printf", NULL, 0, 0);
+                }
+
+                instruction_add ( PUSH, 0x0A, NULL, 0, 0);
+                instruction_add ( SYSCALL, "putchar", NULL, 0, 0);
+
 
             break;
 
@@ -181,7 +205,6 @@ void generate ( FILE *stream, node_t *root )
              * top of the stack according to the kind of expression
              * (single variables/integers handled in separate switch/cases)
              */
-
             break;
 
         case VARIABLE:
@@ -195,9 +218,8 @@ void generate ( FILE *stream, node_t *root )
 
         case INTEGER:
             /*
-             * Integers: constants which can just be put on stack
+             
              */
-
             break;
 
         case ASSIGNMENT_STATEMENT:
