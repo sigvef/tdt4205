@@ -146,6 +146,15 @@ void generate ( FILE *stream, node_t *root )
              * Add space on local stack
              */
 
+            for(int i=0;i<root->children[0]->n_children;i++){
+                instruction_add ( PUSH, 0, NULL, 0, 0);
+
+                /* arrays? TODO: the rest of this */
+                if(root->children[0]->children[i]->n_children == 1){
+                    printf("TYPE: %s\n", root->children[0]->children[i]->type.text);
+                }
+            }
+
             break;
 
         case PRINT_LIST:
