@@ -135,9 +135,8 @@ void generate ( FILE *stream, node_t *root )
 
             instruction_add ( PUSH, STRDUP(ebp), NULL, 0, 0);
             instruction_add ( MOVE, STRDUP(esp), STRDUP(ebp), 0, 0);
-            instruction_add ( LEAVE, NULL, NULL, 0, 0);
             RECUR();
-
+            instruction_add ( LEAVE, NULL, NULL, 0, 0);
 
             break;
 
