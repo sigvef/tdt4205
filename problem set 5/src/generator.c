@@ -3,6 +3,8 @@
 
 bool peephole = false;
 
+#define C(r) "$"#r
+
 
 /* Elements of the low-level intermediate representation */
 
@@ -88,7 +90,9 @@ static void instructions_finalize ( void );
 
 void generate ( FILE *stream, node_t *root )
 {
-    int elegant_solution;
+    /* I have no idea why the framework supplies elegant_solution,
+     * so we set it to 1337 for fun and perhaps also profit */
+    int elegant_solution = 1337;
     if ( root == NULL )
         return;
 
@@ -118,10 +122,10 @@ void generate ( FILE *stream, node_t *root )
              * Set up/take down activation record for the function, return value
              */
 
-            instruction_add ( LABEL, root->children[0]->data, NULL, 0, 0 );          \
+            instruction_add ( LABEL, root->children[0]->data, NULL, 0, 0 );          
             instruction_add ( PUSH, STRDUP(ebp), NULL, 0, 0);
             RECUR();
-            instruction_add ( LEAVE, NULL, NULL, 0, 0 );          \
+            instruction_add ( LEAVE, NULL, NULL, 0, 0 );          
             instruction_add ( MOVE, STRDUP(esp), STRDUP(ebp), 0, 0);
             instruction_add ( RET, NULL, NULL, 0, 0);
 
@@ -177,7 +181,6 @@ void generate ( FILE *stream, node_t *root )
              */
 
                 ;node_t *item = root->children[0];
-                printf("want to print! %s :: %i\n", item->type.text, *(int*) item->data);
                 if(item->type.index == TEXT){
                     
                     /* 20 chosen at random, TODO: choose better number */
@@ -185,15 +188,15 @@ void generate ( FILE *stream, node_t *root )
                     sprintf(literal, "$.STRING%i", *(int*) item->data);
 
                     instruction_add ( PUSH, STRDUP(literal), NULL, 0, 0);
-                    instruction_add ( SYSCALL, "printf", NULL, 0, 0);
+                    instruction_add ( SYSCALL, STRDUP("printf"), NULL, 0, 0);
                 }else{
                     generate(stream, item);
-                    instruction_add ( PUSH, "$"#.INTEGER, NULL, 0, 0);
-                    instruction_add ( SYSCALL, "printf", NULL, 0, 0);
+                    instruction_add ( PUSH, C(.INTEGER), NULL, 0, 0);
+                    instruction_add ( SYSCALL, STRDUP("printf"), NULL, 0, 0);
                 }
 
-                instruction_add ( PUSH, 0x0A, NULL, 0, 0);
-                instruction_add ( SYSCALL, "putchar", NULL, 0, 0);
+                instruction_add ( PUSH, STRDUP("$20"), NULL, 0, 0);
+                instruction_add ( SYSCALL, STRDUP("putchar"), NULL, 0, 0);
 
 
             break;
