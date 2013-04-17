@@ -113,6 +113,7 @@ static void instructions_finalize ( void );
 #define PRINT_NEWLINE() do{ \
     instruction_add(PUSH, STRDUP("$10"), NULL, 0, 0); \
     instruction_add(SYSCALL, STRDUP("putchar"), NULL, 0, 0); \
+    instruction_add(ADD, STRDUP("$4"), esp, 0, 0); \
 }while(false);
 
 
