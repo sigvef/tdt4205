@@ -87,6 +87,18 @@ static void instructions_finalize ( void );
 } while ( false )
 
 
+#define PUSH_STACK_FRAME() do{ \
+    depth++; \
+    instruction_add ( PUSH, ebp, NULL, 0, 0); \
+    instruction_add ( MOVE, esp, ebp, 0, 0); \
+}while(false);
+
+#define POP_STACK_FRAME() do{ \
+    instruction_add ( LEAVE, NULL, NULL, 0, 0); \
+    depth--; \
+}while(false);
+
+
 
 
 void generate ( FILE *stream, node_t *root )
@@ -106,29 +118,23 @@ void generate ( FILE *stream, node_t *root )
             TEXT_HEAD();
             node_t* function = root->children[0]->children[0];
             instruction_add(CALL, function->children[0]->data, NULL, 0, 0);          \
-                TEXT_TAIL();
+            TEXT_TAIL();
             instructions_print(stream);
             instructions_finalize();
             break;
 
         case FUNCTION:
-            depth++;
-            instruction_add ( LABEL, root->children[0]->data, NULL, 0, 0 );          
-            instruction_add ( PUSH, STRDUP(ebp), NULL, 0, 0);
-            instruction_add ( MOVE, STRDUP(esp), STRDUP(ebp), 0, 0);
+            instruction_add(LABEL, root->children[0]->data, NULL, 0, 0);          
+            PUSH_STACK_FRAME();
             RECUR();
-            instruction_add ( LEAVE, NULL, NULL, 0, 0 );          
-            instruction_add ( RET, NULL, NULL, 0, 0);
-            depth--;
+            POP_STACK_FRAME();
+            instruction_add(RET, NULL, NULL, 0, 0);
             break;
 
         case BLOCK:
-            depth++;
-            instruction_add ( PUSH, STRDUP(ebp), NULL, 0, 0);
-            instruction_add ( MOVE, STRDUP(esp), STRDUP(ebp), 0, 0);
+            PUSH_STACK_FRAME();
             RECUR();
-            instruction_add ( LEAVE, NULL, NULL, 0, 0);
-            depth--;
+            POP_STACK_FRAME();
             break;
 
         case DECLARATION:
@@ -150,11 +156,11 @@ void generate ( FILE *stream, node_t *root )
                 sprintf(literal, "$.STRING%i", *(int*) item->data);
                 instruction_add ( PUSH, STRDUP(literal), NULL, 0, 0);
             }else{
-                generate(stream, item);
+                RECUR();
                 instruction_add ( PUSH, STRDUP(C(.INTEGER)), NULL, 0, 0);
             }
             instruction_add ( SYSCALL, STRDUP("printf"), NULL, 0, 0);
-            instruction_add ( ADD, STRDUP("$4"), STRDUP(esp), 0, 0);
+            instruction_add ( ADD, STRDUP("$4"), esp, 0, 0);
             break;
 
         case EXPRESSION:
@@ -164,83 +170,83 @@ void generate ( FILE *stream, node_t *root )
                 if (root->children[1] != NULL) {
                     char literal[20];
                     sprintf(literal, "$%d", 4 * root->children[1]->n_children);
-                    instruction_add(ADD, STRDUP(literal), STRDUP(esp), 0, 0);
+                    instruction_add(ADD, STRDUP(literal), esp, 0, 0);
                 }
-                instruction_add(PUSH, STRDUP(eax), NULL, 0, 0);
+                instruction_add(PUSH, eax, NULL, 0, 0);
 
             }else{
                 RECUR();
-                if(root->n_children == 1 && root->data != NULL && *(char*) root->data == '-'){
-                    instruction_add(POP, STRDUP(ebx), NULL, 0, 0);
-                    instruction_add(NEG, STRDUP(ebx), NULL, 0, 0);
-                    instruction_add(PUSH, STRDUP(ebx), NULL, 0, 0);
+                if(root->n_children == 1){
+                    instruction_add(POP, ebx, NULL, 0, 0);
+                    instruction_add(NEG, ebx, NULL, 0, 0);
+                    instruction_add(PUSH, ebx, NULL, 0, 0);
                 }else if(root->n_children == 2){
-                    instruction_add(POP, STRDUP(ebx), NULL, 0, 0);
-                    instruction_add(POP, STRDUP(eax), NULL, 0, 0);
+                    instruction_add(POP, ebx, NULL, 0, 0);
+                    instruction_add(POP, eax, NULL, 0, 0);
                     switch(*(char*)root->data) {
                         case '+':
-                            instruction_add(ADD, STRDUP(ebx), STRDUP(eax), 0, 0);
+                            instruction_add(ADD, ebx, eax, 0, 0);
                             break;
                         case '-':
-                            instruction_add(SUB, STRDUP(ebx), STRDUP(eax), 0, 0);
+                            instruction_add(SUB, ebx, eax, 0, 0);
                             break;
                         case '*':
-                            instruction_add(MUL, STRDUP(ebx), NULL, 0, 0);
+                            instruction_add(MUL, ebx, NULL, 0, 0);
                             break;
                         case '/':
                             instruction_add(CLTD, NULL, NULL, 0, 0);
-                            instruction_add(DIV, STRDUP(ebx), NULL, 0, 0);
+                            instruction_add(DIV, ebx, NULL, 0, 0);
                             break;
                         case '<':
-                            instruction_add(CMP, STRDUP(ebx), STRDUP(eax), 0, 0);
+                            instruction_add(CMP, ebx, eax, 0, 0);
                             /* '=' as opposed to '\0' */
                             if (*((char*) root->data + 1) == '=') {
                                 /* <= */
-                                instruction_add(SETLE, STRDUP(al), NULL, 0, 0);
+                                instruction_add(SETLE, al, NULL, 0, 0);
                             } else {
-                                instruction_add(SETL, STRDUP(al), NULL, 0, 0);
+                                instruction_add(SETL, al, NULL, 0, 0);
                             }
                             instruction_add(CBW, NULL, NULL, 0, 0);
                             instruction_add(CWDE, NULL, NULL, 0, 0);
                             break;
                         case '>':
-                            instruction_add(CMP, STRDUP(ebx), STRDUP(eax), 0, 0);
+                            instruction_add(CMP, ebx, eax, 0, 0);
                             if (*((char*) root->data + 1) != '\0' && *((char*) root->data + 1) == '=') {
                                 /* >= */
-                                instruction_add(SETGE, STRDUP(al), NULL, 0, 0);
+                                instruction_add(SETGE, al, NULL, 0, 0);
                             } else {
-                                instruction_add(SETG, STRDUP(al), NULL, 0, 0);
+                                instruction_add(SETG, al, NULL, 0, 0);
                             }
                             instruction_add(CBW, NULL, NULL, 0, 0);
                             instruction_add(CWDE, NULL, NULL, 0, 0);
                             break;
                         case '=':
                             /* == */
-                            instruction_add(CMP, STRDUP(ebx), STRDUP(eax), 0, 0);
-                            instruction_add(SETE, STRDUP(al), NULL, 0, 0);
+                            instruction_add(CMP, ebx, eax, 0, 0);
+                            instruction_add(SETE, al, NULL, 0, 0);
                             instruction_add(CBW, NULL, NULL, 0, 0);
                             instruction_add(CWDE, NULL, NULL, 0, 0);
                             break;
                         case '!':
                             /* != */
-                            instruction_add(CMP, STRDUP(ebx), STRDUP(eax), 0, 0);
-                            instruction_add(SETNE, STRDUP(al), NULL, 0, 0);
+                            instruction_add(CMP, ebx, eax, 0, 0);
+                            instruction_add(SETNE, al, NULL, 0, 0);
                             instruction_add(CBW, NULL, NULL, 0, 0);
                             instruction_add(CWDE, NULL, NULL, 0, 0);
                             break;
                     }
-                    instruction_add(PUSH, STRDUP(eax), NULL, 0, 0);
+                    instruction_add(PUSH, eax, NULL, 0, 0);
                 }
 
             }
             break;
 
         case VARIABLE:
-            instruction_add(MOVE, STRDUP(ebp), STRDUP(ecx), 0, 0);
+            instruction_add(MOVE, ebp, ecx, 0, 0);
             for (int i = 0; i < (depth - root->entry->depth); i++) {
                 instruction_add(MOVE, STRDUP("(%ecx)"), ecx, 0, 0);
             }
-            instruction_add(PUSH, STRDUP(ecx), NULL, root->entry->stack_offset, 0);
+            instruction_add(PUSH, ecx, NULL, root->entry->stack_offset, 0);
             break;
 
         case INTEGER:
@@ -251,21 +257,21 @@ void generate ( FILE *stream, node_t *root )
 
         case ASSIGNMENT_STATEMENT:
             generate(stream, root->children[1]);
-            instruction_add(POP, STRDUP(eax), NULL, 0, 0);
+            instruction_add(POP, eax, NULL, 0, 0);
             if (depth == root->children[0]->entry->depth) {
-                instruction_add(MOVE, STRDUP(eax), STRDUP(ebp), 0, root->children[0]->entry->stack_offset);
+                instruction_add(MOVE, eax, ebp, 0, root->children[0]->entry->stack_offset);
             } else {
-                instruction_add(MOVE, STRDUP(ebp), STRDUP(ecx), 0, 0);
+                instruction_add(MOVE, ebp, ecx, 0, 0);
                 for (int i = 0; i < (depth - root->children[0]->entry->depth); i++) {
-                    instruction_add(MOVE, STRDUP("(%ecx)"), STRDUP(ecx), 0, 0);
+                    instruction_add(MOVE, STRDUP("(%ecx)"), ecx, 0, 0);
                 }
-                instruction_add(MOVE, STRDUP(eax), STRDUP(ecx), 0, root->children[0]->entry->stack_offset);
+                instruction_add(MOVE, eax, ecx, 0, root->children[0]->entry->stack_offset);
             }
             break;
 
         case RETURN_STATEMENT:
             RECUR();
-            instruction_add(POP, STRDUP(eax), NULL, 0, 0);
+            instruction_add(POP, eax, NULL, 0, 0);
             for (int i = 1; i < depth; i++) {
                 instruction_add(LEAVE, NULL, NULL, 0, 0);
             }
