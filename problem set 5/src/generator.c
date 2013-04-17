@@ -99,6 +99,18 @@ static void instructions_finalize ( void );
 }while(false);
 
 
+#define UNWIND_FRAMES(n) do{ \
+    for(int i=0;i<(n);i++){ \
+        instruction_add(MOVE, STRDUP("(%ecx)"), ecx, 0, 0); \
+    } \
+}while(false);
+
+
+#define SIGN_EXTEND() do{ \
+    instruction_add(CBW, NULL, NULL, 0, 0); \
+    instruction_add(CWDE, NULL, NULL, 0, 0); \
+}while(false);
+
 
 
 void generate ( FILE *stream, node_t *root )
@@ -206,8 +218,7 @@ void generate ( FILE *stream, node_t *root )
                             } else {
                                 instruction_add(SETL, al, NULL, 0, 0);
                             }
-                            instruction_add(CBW, NULL, NULL, 0, 0);
-                            instruction_add(CWDE, NULL, NULL, 0, 0);
+                            SIGN_EXTEND();
                             break;
                         case '>':
                             instruction_add(CMP, ebx, eax, 0, 0);
@@ -217,22 +228,19 @@ void generate ( FILE *stream, node_t *root )
                             } else {
                                 instruction_add(SETG, al, NULL, 0, 0);
                             }
-                            instruction_add(CBW, NULL, NULL, 0, 0);
-                            instruction_add(CWDE, NULL, NULL, 0, 0);
+                            SIGN_EXTEND();
                             break;
                         case '=':
                             /* == */
                             instruction_add(CMP, ebx, eax, 0, 0);
                             instruction_add(SETE, al, NULL, 0, 0);
-                            instruction_add(CBW, NULL, NULL, 0, 0);
-                            instruction_add(CWDE, NULL, NULL, 0, 0);
+                            SIGN_EXTEND();
                             break;
                         case '!':
                             /* != */
                             instruction_add(CMP, ebx, eax, 0, 0);
                             instruction_add(SETNE, al, NULL, 0, 0);
-                            instruction_add(CBW, NULL, NULL, 0, 0);
-                            instruction_add(CWDE, NULL, NULL, 0, 0);
+                            SIGN_EXTEND();
                             break;
                     }
                     instruction_add(PUSH, eax, NULL, 0, 0);
@@ -243,9 +251,7 @@ void generate ( FILE *stream, node_t *root )
 
         case VARIABLE:
             instruction_add(MOVE, ebp, ecx, 0, 0);
-            for (int i = 0; i < (depth - root->entry->depth); i++) {
-                instruction_add(MOVE, STRDUP("(%ecx)"), ecx, 0, 0);
-            }
+            UNWIND_FRAMES(depth - root->entry->depth);
             instruction_add(PUSH, ecx, NULL, root->entry->stack_offset, 0);
             break;
 
@@ -262,9 +268,7 @@ void generate ( FILE *stream, node_t *root )
                 instruction_add(MOVE, eax, ebp, 0, root->children[0]->entry->stack_offset);
             } else {
                 instruction_add(MOVE, ebp, ecx, 0, 0);
-                for (int i = 0; i < (depth - root->children[0]->entry->depth); i++) {
-                    instruction_add(MOVE, STRDUP("(%ecx)"), ecx, 0, 0);
-                }
+                UNWIND_FRAMES(depth - root->children[0]->entry->depth);
                 instruction_add(MOVE, eax, ecx, 0, root->children[0]->entry->stack_offset);
             }
             break;
@@ -272,7 +276,7 @@ void generate ( FILE *stream, node_t *root )
         case RETURN_STATEMENT:
             RECUR();
             instruction_add(POP, eax, NULL, 0, 0);
-            for (int i = 1; i < depth; i++) {
+            for (int i=1;i<depth;i++) {
                 instruction_add(LEAVE, NULL, NULL, 0, 0);
             }
             instruction_add(RET, NULL, NULL, 0, 0);
