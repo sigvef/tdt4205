@@ -105,10 +105,35 @@ static void instructions_finalize ( void );
     } \
 }while(false);
 
-
-#define SIGN_EXTEND() do{ \
+#define BYTE_TO_DWORD() do{ \
     instruction_add(CBW, NULL, NULL, 0, 0); \
     instruction_add(CWDE, NULL, NULL, 0, 0); \
+}while(false);
+
+#define PRINT_NEWLINE() do{ \
+    instruction_add(PUSH, STRDUP("$10"), NULL, 0, 0); \
+    instruction_add(SYSCALL, STRDUP("putchar"), NULL, 0, 0); \
+}while(false);
+
+
+#define SAVE_REGISTERS() do{ \
+    instruction_add(PUSH, ebx, NULL, 0, 0); \
+    instruction_add(PUSH, ecx, NULL, 0, 0); \
+    instruction_add(PUSH, edx, NULL, 0, 0); \
+    instruction_add(PUSH, esp, NULL, 0, 0); \
+    instruction_add(PUSH, ebp, NULL, 0, 0); \
+    instruction_add(PUSH, esi, NULL, 0, 0); \
+    instruction_add(PUSH, edi, NULL, 0, 0); \
+}while(false);
+
+#define RESTORE_REGISTERS() do{ \
+    instruction_add(POP, edi, NULL, 0, 0); \
+    instruction_add(POP, esi, NULL, 0, 0); \
+    instruction_add(POP, ebp, NULL, 0, 0); \
+    instruction_add(POP, esp, NULL, 0, 0); \
+    instruction_add(POP, edx, NULL, 0, 0); \
+    instruction_add(POP, ecx, NULL, 0, 0); \
+    instruction_add(POP, ebx, NULL, 0, 0); \
 }while(false);
 
 
@@ -135,13 +160,20 @@ void generate ( FILE *stream, node_t *root )
             instructions_finalize();
             break;
 
+
         case FUNCTION:
+
+            /* label */
             instruction_add(LABEL, root->children[0]->data, NULL, 0, 0);          
+
             PUSH_STACK_FRAME();
             RECUR();
             POP_STACK_FRAME();
+
+            /* return */
             instruction_add(RET, NULL, NULL, 0, 0);
             break;
+
 
         case BLOCK:
             PUSH_STACK_FRAME();
@@ -149,16 +181,18 @@ void generate ( FILE *stream, node_t *root )
             POP_STACK_FRAME();
             break;
 
+
         case DECLARATION:
+
+            /* push zeroes to the stack, so we know variables are init'd to zero */
             for(int i=0;i<root->children[0]->n_children;i++){
-                instruction_add ( PUSH, STRDUP("$0"), NULL, 0, 0);
+                instruction_add(PUSH, STRDUP("$0"), NULL, 0, 0);
             }
             break;
 
         case PRINT_LIST:
             RECUR();
-            instruction_add ( PUSH, STRDUP("$10"), NULL, 0, 0);
-            instruction_add ( SYSCALL, STRDUP("putchar"), NULL, 0, 0);
+            PRINT_NEWLINE();
             break;
 
         case PRINT_ITEM:
@@ -166,88 +200,121 @@ void generate ( FILE *stream, node_t *root )
             if(item->type.index == TEXT){
                 char literal[20];
                 sprintf(literal, "$.STRING%i", *(int*) item->data);
-                instruction_add ( PUSH, STRDUP(literal), NULL, 0, 0);
+                instruction_add(PUSH, STRDUP(literal), NULL, 0, 0);
             }else{
                 RECUR();
-                instruction_add ( PUSH, STRDUP(C(.INTEGER)), NULL, 0, 0);
+                instruction_add(PUSH, STRDUP(C(.INTEGER)), NULL, 0, 0);
             }
-            instruction_add ( SYSCALL, STRDUP("printf"), NULL, 0, 0);
-            instruction_add ( ADD, STRDUP("$4"), esp, 0, 0);
+            instruction_add(SYSCALL, STRDUP("printf"), NULL, 0, 0);
+            instruction_add(ADD, STRDUP("$4"), esp, 0, 0);
             break;
 
         case EXPRESSION:
-            if(root->data != NULL && strcmp(root->data, "F") == 0){
+
+            /* expression is a function call! */
+            if(strncmp(root->data, "F", 1) == 0){
+
+                /* save registers on stack */
+                SAVE_REGISTERS();
+
+                /* setup function params */
                 generate(stream, root->children[1]);
+
+                /* do function call */
                 instruction_add(CALL, root->children[0]->data, NULL, 0, 0);
+
+                /* remove function params */
                 if (root->children[1] != NULL) {
                     char literal[20];
                     sprintf(literal, "$%d", 4 * root->children[1]->n_children);
                     instruction_add(ADD, STRDUP(literal), esp, 0, 0);
                 }
+
+                /* restore registers from stack */
+                RESTORE_REGISTERS();
+
+                /* push return value */
                 instruction_add(PUSH, eax, NULL, 0, 0);
 
+
+            /* expression is not a function call! */
             }else{
                 RECUR();
+
+                /* unary operations */
                 if(root->n_children == 1){
+
+                    /* unary minus */
                     instruction_add(POP, ebx, NULL, 0, 0);
                     instruction_add(NEG, ebx, NULL, 0, 0);
                     instruction_add(PUSH, ebx, NULL, 0, 0);
+
+
+                /* binary operations */
                 }else if(root->n_children == 2){
+
+                    /* pop operands */
                     instruction_add(POP, ebx, NULL, 0, 0);
                     instruction_add(POP, eax, NULL, 0, 0);
-                    switch(*(char*)root->data) {
+                    
+                    /* get operator */
+                    char operator = *(char*) root->data;
+                    char second_char = *((char*) root->data + 1);
+
+                    /* operate! */
+                    switch(operator) {
+
                         case '+':
                             instruction_add(ADD, ebx, eax, 0, 0);
                             break;
+
                         case '-':
                             instruction_add(SUB, ebx, eax, 0, 0);
                             break;
+
                         case '*':
                             instruction_add(MUL, ebx, NULL, 0, 0);
                             break;
+
                         case '/':
                             instruction_add(CLTD, NULL, NULL, 0, 0);
                             instruction_add(DIV, ebx, NULL, 0, 0);
                             break;
+
                         case '<':
                             instruction_add(CMP, ebx, eax, 0, 0);
-                            /* '=' as opposed to '\0' */
-                            if (*((char*) root->data + 1) == '=') {
-                                /* <= */
-                                instruction_add(SETLE, al, NULL, 0, 0);
-                            } else {
-                                instruction_add(SETL, al, NULL, 0, 0);
-                            }
-                            SIGN_EXTEND();
+                            int instruction = second_char == '=' ? SETLE : SETL;
+                            instruction_add(instruction, al, NULL, 0, 0);
+                            BYTE_TO_DWORD();
                             break;
+
                         case '>':
                             instruction_add(CMP, ebx, eax, 0, 0);
-                            if (*((char*) root->data + 1) != '\0' && *((char*) root->data + 1) == '=') {
-                                /* >= */
-                                instruction_add(SETGE, al, NULL, 0, 0);
-                            } else {
-                                instruction_add(SETG, al, NULL, 0, 0);
-                            }
-                            SIGN_EXTEND();
+                            instruction = second_char == '=' ? SETGE : SETG;
+                            instruction_add(instruction, al, NULL, 0, 0);
+                            BYTE_TO_DWORD();
                             break;
+
                         case '=':
-                            /* == */
                             instruction_add(CMP, ebx, eax, 0, 0);
                             instruction_add(SETE, al, NULL, 0, 0);
-                            SIGN_EXTEND();
+                            BYTE_TO_DWORD();
                             break;
+
                         case '!':
-                            /* != */
                             instruction_add(CMP, ebx, eax, 0, 0);
                             instruction_add(SETNE, al, NULL, 0, 0);
-                            SIGN_EXTEND();
+                            BYTE_TO_DWORD();
                             break;
                     }
+
+                    /* finally push evaluated expression to stack */
                     instruction_add(PUSH, eax, NULL, 0, 0);
                 }
 
             }
             break;
+
 
         case VARIABLE:
             instruction_add(MOVE, ebp, ecx, 0, 0);
@@ -255,23 +322,22 @@ void generate ( FILE *stream, node_t *root )
             instruction_add(PUSH, ecx, NULL, root->entry->stack_offset, 0);
             break;
 
+
         case INTEGER:
             ;char literal[20];
             sprintf(literal, "$%d", *(int*)root->data);
             instruction_add(PUSH, STRDUP(literal), NULL, 0, 0);
             break;
 
+
         case ASSIGNMENT_STATEMENT:
             generate(stream, root->children[1]);
             instruction_add(POP, eax, NULL, 0, 0);
-            if (depth == root->children[0]->entry->depth) {
-                instruction_add(MOVE, eax, ebp, 0, root->children[0]->entry->stack_offset);
-            } else {
-                instruction_add(MOVE, ebp, ecx, 0, 0);
-                UNWIND_FRAMES(depth - root->children[0]->entry->depth);
-                instruction_add(MOVE, eax, ecx, 0, root->children[0]->entry->stack_offset);
-            }
+            instruction_add(MOVE, ebp, ecx, 0, 0);
+            UNWIND_FRAMES(depth - root->children[0]->entry->depth);
+            instruction_add(MOVE, eax, ecx, 0, root->children[0]->entry->stack_offset);
             break;
+
 
         case RETURN_STATEMENT:
             RECUR();
