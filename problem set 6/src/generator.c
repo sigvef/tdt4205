@@ -43,6 +43,10 @@ static void instruction_add ( opcode_t op, char *arg1, char *arg2, int32_t off1,
 static void instructions_print ( FILE *stream );
 static void instructions_finalize ( void );
 
+int while_counter = 0;
+int if_counter = 0;
+int for_counter = 0;
+
 
 /*
  * Convenience macro to continue the journey through the tree - just to save
@@ -526,15 +530,82 @@ void generate ( FILE *stream, node_t *root )
             break;
             
         case WHILE_STATEMENT:
-        		RECUR();
+                ;char label_while[20];
+                char label_endwhile[20];
+
+                int id = while_counter++;
+
+                sprintf(label_while, "_while_%i", id);
+                sprintf(label_endwhile, "_endwhile_%i", id);
+
+                instruction_add(LABEL, STRDUP(label_while+1), NULL, 0, 0);
+                generate(stream, root->children[0]);
+                instruction_add(POP, eax, NULL, 0, 0);
+
+                instruction_add(CMPZERO, eax, NULL, 0, 0);
+                instruction_add(JUMPZERO, STRDUP(label_endwhile), NULL, 0, 0);
+                generate(stream, root->children[1]);
+                instruction_add(JUMP, STRDUP(label_while), NULL, 0, 0);
+                instruction_add(LABEL, STRDUP(label_endwhile+1), NULL, 0, 0);
+
             break;
 
         case FOR_STATEMENT:  
-        		RECUR();
+                ;char label_for[20];
+                char label_endfor[20];
+
+                id = for_counter++;
+
+                sprintf(label_for, "_for_%i", id);
+                sprintf(label_endfor, "_endfor_%i", id);
+
+                generate(stream, root->children[0]);
+
+                int32_t offset_to_counter = root->children[0]->children[0]->entry->stack_offset;
+
+                instruction_add(LABEL,      STRDUP(label_for +1),         NULL, 0, 0);
+
+                generate(stream, root->children[1]);
+
+                char strtemp[20];
+                sprintf(strtemp, "%i(%%ebp)", offset_to_counter);
+                instruction_add(CMP,      eax,  STRDUP(strtemp) , 0, 0);
+                instruction_add(JUMPZERO, STRDUP(label_endfor),  NULL, 0, 0);
+
+                generate(stream, root->children[2]);
+
+                instruction_add(MOVE,   STRDUP("$1") , eax, 0, 0);
+                instruction_add(ADD,    STRDUP(strtemp),eax, 0, 0);
+                instruction_add(MOVE,  eax, STRDUP(strtemp) , 0, 0);
+                instruction_add(JUMP,   STRDUP(label_for),  NULL, 0, 0);
+                instruction_add(LABEL,  STRDUP(label_endfor+1), NULL, 0, 0);
+
             break;
             
         case IF_STATEMENT:
-        		RECUR();
+                ;char label_else[20];
+                char label_endif[20];
+
+                id = if_counter++;
+
+                sprintf(label_else, "_else_%i", id);
+                sprintf(label_endif, "_endif_%i", id);
+
+                generate(stream, root->children[0]);
+
+                instruction_add(POP,      eax,         NULL, 0, 0);
+                instruction_add(CMPZERO,  eax,         NULL, 0, 0);
+                instruction_add(JUMPZERO, STRDUP(label_else),  NULL, 0, 0);
+                
+                generate(stream, root->children[1]);
+
+                instruction_add(JUMP,     STRDUP(label_endif), NULL, 0, 0);
+                instruction_add(LABEL,    STRDUP(label_else+1),  NULL, 0, 0);
+
+                if(root->n_children > 2){
+                    generate(stream, root->children[2]);
+                }
+                instruction_add(LABEL,    STRDUP(label_endif+1),  NULL, 0, 0);
             break;
 
         case NULL_STATEMENT:
